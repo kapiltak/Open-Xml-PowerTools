@@ -49,6 +49,22 @@ namespace OpenXmlPowerTools
             return CompareInternal(source1, source2, settings, true);
         }
 
+        /// <summary>
+        /// Compares two updated documents originating from the same original document.
+        /// </summary>
+        /// <param name="original"></param>
+        /// <param name="updatedDocumentFirst"></param>
+        /// <param name="updatedDocumentSecond"></param>
+        /// <returns></returns>
+        public static WmlDocument TriangularCompare(
+            WmlDocument original,
+            WmlDocument updatedDocumentFirst,
+            WmlDocument updatedDocumentSecond)
+        {
+            WmlDocument comparisonResult = new WmlDocument();
+            return comparisonResult;
+        }
+
         private static WmlDocument CompareInternal(
             WmlDocument source1,
             WmlDocument source2,
