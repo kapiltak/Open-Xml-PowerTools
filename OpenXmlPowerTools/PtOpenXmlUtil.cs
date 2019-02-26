@@ -819,7 +819,7 @@ namespace OpenXmlPowerTools
 
                             // w:ins/w:r/w:t
                             if ((ce.Elements().Elements().Count(e => e.Name != W.rPr) != 1) ||
-                                !ce.Elements().Elements(W.t).Any())
+                                (!ce.Elements().Elements(W.t).Any() && !ce.Elements().Elements(W.fldChar).Any() && !ce.Elements().Elements(W.instrText).Any()))
                                 return dontConsolidate;
 
                             XAttribute dateIns2 = ce.Attribute(W.date);
@@ -833,18 +833,13 @@ namespace OpenXmlPowerTools
 
                             return "Wins2" +
                                    authorIns2 +
-                                   dateInsString2 +
-                                   idIns2 +
-                                   ce.Elements()
-                                       .Elements(W.rPr)
-                                       .Select(rPr => rPr.ToString(SaveOptions.None))
-                                       .StringConcatenate();
+                                   dateInsString2;
                         }
 
                         if (ce.Name == W.del)
                         {
                             if ((ce.Elements(W.r).Elements().Count(e => e.Name != W.rPr) != 1) ||
-                                !ce.Elements().Elements(W.delText).Any())
+                                (!ce.Elements().Elements(W.delText).Any() && !ce.Elements().Elements(W.fldChar).Any() && !ce.Elements().Elements(W.delInstrText).Any()))
                                 return dontConsolidate;
 
                             XAttribute dateDel2 = ce.Attribute(W.date);
@@ -854,11 +849,7 @@ namespace OpenXmlPowerTools
 
                             return "Wdel" +
                                    authorDel2 +
-                                   dateDelString2 +
-                                   ce.Elements(W.r)
-                                       .Elements(W.rPr)
-                                       .Select(rPr => rPr.ToString(SaveOptions.None))
-                                       .StringConcatenate();
+                                   dateDelString2;
                         }
 
                         return dontConsolidate;
@@ -909,19 +900,28 @@ namespace OpenXmlPowerTools
                                         g.First().Elements(W.del).Elements(W.r).Elements(W.rPr),
                                         new XElement(W.delText, xs, textValue))));
 #endif
-                        return new XElement(W.ins,
-                            g.First().Attributes(),
-                            new XElement(W.r,
-                                g.First().Elements(W.r).Elements(W.rPr),
-                                new XElement(W.t, xs, textValue)));
+                        //return new XElement(W.ins,
+                        //    g.First().Attributes(),
+                        //    new XElement(W.r,
+                        //        g.First().Elements(W.r).Elements(W.rPr),
+                        //        new XElement(W.t, xs, textValue)));
+                        IEnumerable<IEnumerable<XElement>> elementsList = g.Select(r => r.Descendants(W.r));
+                        return new XElement(W.ins, g.First().Attributes(), elementsList);
                     }
 
+                    //if (g.First().Name == W.del)
+                    //    return new XElement(W.del,
+                    //        g.First().Attributes(),
+                    //        new XElement(W.r,
+                    //            g.First().Elements(W.r).Elements(W.rPr),
+                    //            new XElement(W.delText, xs, textValue)));
+
                     if (g.First().Name == W.del)
-                        return new XElement(W.del,
-                            g.First().Attributes(),
-                            new XElement(W.r,
-                                g.First().Elements(W.r).Elements(W.rPr),
-                                new XElement(W.delText, xs, textValue)));
+                    {
+                        IEnumerable<IEnumerable<XElement>> elementsList =
+                            g.Select(r => r.Descendants(W.r));
+                        return new XElement(W.del, g.First().Attributes(), elementsList);
+                    }
 
                     return g;
                 }));

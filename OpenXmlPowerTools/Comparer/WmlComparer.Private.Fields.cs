@@ -107,13 +107,13 @@ namespace OpenXmlPowerTools
             M.oMathPara,
             M.oMath,
             W.fldChar,
-            W.instrText
+            W.instrText,
+            W.bookmarkStart,
+            W.bookmarkEnd
         };
 
         private static readonly XName[] ElementsToThrowAway =
         {
-            W.bookmarkStart,
-            W.bookmarkEnd,
             W.commentRangeStart,
             W.commentRangeEnd,
             W.lastRenderedPageBreak,

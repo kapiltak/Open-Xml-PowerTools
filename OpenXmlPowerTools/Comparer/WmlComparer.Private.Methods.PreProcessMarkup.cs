@@ -68,13 +68,13 @@ namespace OpenXmlPowerTools
                     // TODO: Revisit
                     var msSettings = new SimplifyMarkupSettings
                     {
-                        RemoveBookmarks = true,
+                        RemoveBookmarks = false,
 
                         AcceptRevisions = false,
                         RemoveComments = true,
 
-                        RemoveContentControls = true,
-                        RemoveFieldCodes = true,
+                        RemoveContentControls = false,
+                        RemoveFieldCodes = false,
 
                         RemoveGoBackBookmark = true,
                         RemoveLastRenderedPageBreak = true,
@@ -82,8 +82,9 @@ namespace OpenXmlPowerTools
                         RemoveProof = true,
                         RemoveSmartTags = true,
                         RemoveSoftHyphens = true,
-                        RemoveHyperlinks = true
+                        RemoveHyperlinks = false
                     };
+
                     MarkupSimplifier.SimplifyMarkup(wDoc, msSettings);
                     ChangeFootnoteEndnoteReferencesToUniqueRange(wDoc, startingIdForFootnotesEndnotes);
                     AddUnidsToMarkupInContentParts(wDoc);

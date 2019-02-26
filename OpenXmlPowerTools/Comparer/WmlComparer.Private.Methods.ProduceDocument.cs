@@ -781,7 +781,7 @@ namespace OpenXmlPowerTools
                 {
                     List<string> statusList = element
                         .DescendantsTrimmed(W.txbxContent)
-                        .Where(d => d.Name == W.t || d.Name == W.delText || AllowableRunChildren.Contains(d.Name))
+                        .Where(d => d.Name == W.t || d.Name == W.delText || d.Name == W.delInstrText || AllowableRunChildren.Contains(d.Name))
                         .Attributes(PtOpenXml.Status)
                         .Select(a => (string) a)
                         .Distinct()
@@ -2723,6 +2723,33 @@ namespace OpenXmlPowerTools
                                         textOfTextElement);
 
                                 return (object) new XElement(W.t,
+                                    GetXmlSpaceAttribute(textOfTextElement),
+                                    textOfTextElement);
+                            })
+                            .ToList();
+                        return newChildElements;
+                    }
+
+                    if (ancestorBeingConstructed.Name == W.instrText)
+                    {
+                        List<object> newChildElements = groupedChildren
+                            .Select(gc =>
+                            {
+                                string textOfTextElement = gc.Select(gce => gce.ContentElement.Value).StringConcatenate();
+                                bool del = gc.First().CorrelationStatus == CorrelationStatus.Deleted;
+                                bool ins = gc.First().CorrelationStatus == CorrelationStatus.Inserted;
+                                if (del)
+                                    return (object)new XElement(W.delInstrText,
+                                        new XAttribute(PtOpenXml.Status, "Deleted"),
+                                        GetXmlSpaceAttribute(textOfTextElement),
+                                        textOfTextElement);
+                                if (ins)
+                                    return (object)new XElement(W.instrText,
+                                        new XAttribute(PtOpenXml.Status, "Inserted"),
+                                        GetXmlSpaceAttribute(textOfTextElement),
+                                        textOfTextElement);
+
+                                return (object)new XElement(W.instrText,
                                     GetXmlSpaceAttribute(textOfTextElement),
                                     textOfTextElement);
                             })

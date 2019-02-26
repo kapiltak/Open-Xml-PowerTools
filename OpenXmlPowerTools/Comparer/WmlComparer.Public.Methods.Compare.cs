@@ -1,10 +1,12 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 // It is possible to optimize DescendantContentAtoms
 
@@ -49,20 +51,122 @@ namespace OpenXmlPowerTools
             return CompareInternal(source1, source2, settings, true);
         }
 
-        /// <summary>
-        /// Compares two updated documents originating from the same original document.
-        /// </summary>
-        /// <param name="original"></param>
-        /// <param name="updatedDocumentFirst"></param>
-        /// <param name="updatedDocumentSecond"></param>
-        /// <returns></returns>
-        public static WmlDocument TriangularCompare(
-            WmlDocument original,
-            WmlDocument updatedDocumentFirst,
-            WmlDocument updatedDocumentSecond)
+        public static WmlDocument TriangularCompare(MemoryStream original, MemoryStream updatedDocumentFirst,
+            MemoryStream updatedDocumentSecond, string author)
         {
-            WmlDocument comparisonResult = new WmlDocument();
-            return comparisonResult;
+            setBookmarks(original);
+            setBookmarks(updatedDocumentFirst);
+            setBookmarks(updatedDocumentSecond);
+            
+            var docOriginal = new WmlDocument("original.docx", original);
+            var docNegotiated = new WmlDocument("doc1.docx", updatedDocumentFirst);
+            var docUpdated = new WmlDocument("doc2.docx", updatedDocumentSecond);
+
+            var settings = new WmlComparerSettings();
+            settings.AuthorForRevisions = author;
+            var result = WmlComparer.Compare(docNegotiated, docUpdated, settings);
+            return result;
+        }
+        private static void setBookmarks(MemoryStream path)
+        {
+            using (var doc1 = WordprocessingDocument.Open(path, true))
+            {
+                //foreach (var fc in doc1.MainDocumentPart.Document.Body.Descendants<FieldChar>())
+                //{
+                //    fc.Dirty = false;
+                //    if (fc.FieldCharType == "begin")
+                //    {
+                //        var run = fc.Parent;
+                //        while (true)
+                //        {
+                //            run = run.NextSibling();
+                //            if (run == null)
+                //                break;
+
+                //            foreach (var text in run.Descendants<Text>())
+                //            {
+                //                text.Text = "{Link}";
+                //            }
+
+                //            if (run.Descendants<FieldChar>().Count() <= 0)
+                //                continue;
+
+                //            var nextfc = run.Descendants<FieldChar>().First();
+
+                //            if (nextfc.FieldCharType == "end")
+                //                break;
+                //        }
+                //    }
+                //}
+
+                foreach (BookmarkStart bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                {
+                    var previous = bkmStart.PreviousSibling();
+
+                    while (previous.GetType() == typeof(BookmarkEnd))
+                    {
+                        var id = (previous as BookmarkEnd).Id.Value;
+
+                        if (id == bkmStart.Id.Value)
+                        {
+                            bkmStart.Parent.AppendChild(previous.CloneNode(true));
+                            previous.Remove();
+                            break;
+                        }
+
+                        previous = previous.PreviousSibling();
+                    }
+                }
+
+
+                List<BookmarkStart> bkmToremove = new List<BookmarkStart>();
+                foreach (var bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                {
+                    var parent = bkmStart.Parent;
+                    if (parent.GetType() != typeof(Paragraph))
+                    {
+                        parent = bkmStart;
+                        while (parent != null)
+                        {
+                            if (parent.GetType() == typeof(Paragraph))
+                            {
+                                parent.FirstChild.InsertBeforeSelf(bkmStart.CloneNode(true));
+                                bkmToremove.Add(bkmStart);
+                                break;
+                            }
+                            parent = parent.NextSibling();
+                        }
+                    }
+                }
+
+                foreach (var bkm in bkmToremove)
+                    bkm.Remove();
+
+                List<BookmarkEnd> bkmEtoRemove = new List<BookmarkEnd>();
+                foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+                {
+                    var parent = bkmEnd.Parent;
+                    if (parent.GetType() != typeof(Paragraph))
+                    {
+                        parent = bkmEnd;
+                        while (parent != null)
+                        {
+                            if (parent.GetType() == typeof(Paragraph))
+                            {
+                                parent.AppendChild(bkmEnd.CloneNode(true));
+                                bkmEtoRemove.Add(bkmEnd);
+                                break;
+                            }
+                            parent = parent.PreviousSibling();
+                        }
+                    }
+                }
+
+                foreach (var bkm in bkmEtoRemove)
+                    bkm.Remove();
+
+                doc1.Save();
+            }
         }
 
         private static WmlDocument CompareInternal(
