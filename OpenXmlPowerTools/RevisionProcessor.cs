@@ -1842,7 +1842,7 @@ namespace OpenXmlPowerTools
                     nextContentElement = current
                         .ElementsAfterSelf()
                         .DescendantsAndSelf()
-                        .FirstOrDefault(e => e.Name == W.p || e.Name == W.tbl);
+                        .FirstOrDefault(e => e.Name == W.p || e.Name == W.tbl); // || e.Name == W.bookmarkStart
                     if (nextContentElement != null)
                     {
                         currentContentInfo.NextBlockContentElement = nextContentElement;

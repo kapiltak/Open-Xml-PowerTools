@@ -5447,7 +5447,9 @@ listSeparator
             W.hdr,
             W.ftr,
             W.endnote,
-            W.footnote
+            W.footnote,
+            W.bookmarkStart,
+            W.bookmarkEnd
         };
 
         public static readonly XName[] SubRunLevelContent =

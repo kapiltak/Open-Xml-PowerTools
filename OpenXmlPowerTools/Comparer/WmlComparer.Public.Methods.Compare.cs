@@ -1,10 +1,12 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -57,7 +59,7 @@ namespace OpenXmlPowerTools
             setBookmarks(original);
             setBookmarks(updatedDocumentFirst);
             setBookmarks(updatedDocumentSecond);
-            
+
             var docOriginal = new WmlDocument("original.docx", original);
             var docNegotiated = new WmlDocument("doc1.docx", updatedDocumentFirst);
             var docUpdated = new WmlDocument("doc2.docx", updatedDocumentSecond);
@@ -65,11 +67,12 @@ namespace OpenXmlPowerTools
             var settings = new WmlComparerSettings();
             settings.AuthorForRevisions = author;
             var result = WmlComparer.Compare(docNegotiated, docUpdated, settings);
+            setBookmarksAfterCompare(result);
             return result;
         }
-        private static void setBookmarks(MemoryStream path)
+        private static void setBookmarks(MemoryStream stream)
         {
-            using (var doc1 = WordprocessingDocument.Open(path, true))
+            using (var doc1 = WordprocessingDocument.Open(stream, true))
             {
                 //foreach (var fc in doc1.MainDocumentPart.Document.Body.Descendants<FieldChar>())
                 //{
@@ -99,74 +102,146 @@ namespace OpenXmlPowerTools
                 //    }
                 //}
 
-                foreach (BookmarkStart bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                //foreach (BookmarkStart bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                //{
+                //    var previous = bkmStart.PreviousSibling();
+
+                //    while (previous.GetType() == typeof(BookmarkEnd))
+                //    {
+                //        var id = (previous as BookmarkEnd).Id.Value;
+
+                //        if (id == bkmStart.Id.Value)
+                //        {
+                //            bkmStart.Parent.AppendChild(previous.CloneNode(true));
+                //            previous.Remove();
+                //            break;
+                //        }
+
+                //        previous = previous.PreviousSibling();
+                //    }
+                //}
+
+                try
                 {
-                    var previous = bkmStart.PreviousSibling();
-
-                    while (previous.GetType() == typeof(BookmarkEnd))
+                    List<OpenXmlElement> bkmToremove = new List<OpenXmlElement>();
+                    foreach (var child in doc1.MainDocumentPart.Document.Body.ChildElements)
                     {
-                        var id = (previous as BookmarkEnd).Id.Value;
-
-                        if (id == bkmStart.Id.Value)
+                        if (child.GetType() == typeof(BookmarkStart))
                         {
-                            bkmStart.Parent.AppendChild(previous.CloneNode(true));
-                            previous.Remove();
-                            break;
-                        }
-
-                        previous = previous.PreviousSibling();
-                    }
-                }
-
-
-                List<BookmarkStart> bkmToremove = new List<BookmarkStart>();
-                foreach (var bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
-                {
-                    var parent = bkmStart.Parent;
-                    if (parent.GetType() != typeof(Paragraph))
-                    {
-                        parent = bkmStart;
-                        while (parent != null)
-                        {
-                            if (parent.GetType() == typeof(Paragraph))
+                            var sibling = child.NextSibling();
+                            while (sibling != null)
                             {
-                                parent.FirstChild.InsertBeforeSelf(bkmStart.CloneNode(true));
-                                bkmToremove.Add(bkmStart);
+                                if (sibling.GetType() == typeof(Paragraph))
+                                {
+                                    var paraProps = sibling.Descendants<ParagraphProperties>().FirstOrDefault();
+                                    if (paraProps != null)
+                                    {
+                                        paraProps.InsertAfterSelf(child.CloneNode(true));
+                                        bkmToremove.Add(child);
+                                        break;
+                                    }
+                                }
+
+                                sibling = sibling.NextSibling();
+                            }
+                        }
+                    }
+
+                    foreach (var bkm in bkmToremove)
+                        bkm.Remove();
+
+                    bkmToremove = new List<OpenXmlElement>();
+                    string id = "";
+                    foreach (var bkm in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                    {
+                        var found = false;
+                        id = bkm.Id.Value;
+                        foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+                        {
+                            if (bkmEnd.Id.Value == id)
+                            {
+                                found = true;
                                 break;
                             }
-                            parent = parent.NextSibling();
                         }
-                    }
-                }
 
-                foreach (var bkm in bkmToremove)
-                    bkm.Remove();
-
-                List<BookmarkEnd> bkmEtoRemove = new List<BookmarkEnd>();
-                foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
-                {
-                    var parent = bkmEnd.Parent;
-                    if (parent.GetType() != typeof(Paragraph))
-                    {
-                        parent = bkmEnd;
-                        while (parent != null)
+                        if (!found)
                         {
-                            if (parent.GetType() == typeof(Paragraph))
-                            {
-                                parent.AppendChild(bkmEnd.CloneNode(true));
-                                bkmEtoRemove.Add(bkmEnd);
-                                break;
-                            }
-                            parent = parent.PreviousSibling();
+                            bkmToremove.Add(bkm);
                         }
                     }
-                }
 
-                foreach (var bkm in bkmEtoRemove)
-                    bkm.Remove();
+                    foreach (var bkm in bkmToremove)
+                        bkm.Remove();
+
+
+                    bkmToremove = new List<OpenXmlElement>();
+                    foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.ChildElements)
+                    {
+                        if (bkmEnd.GetType() == typeof(BookmarkEnd))
+                        {
+                            var sibling = bkmEnd.PreviousSibling();
+                            while (sibling != null)
+                            {
+                                if (sibling.GetType() == typeof(Paragraph))
+                                {
+                                    sibling.AppendChild(bkmEnd.CloneNode(true));
+                                    bkmToremove.Add(bkmEnd);
+                                    break;
+                                }
+
+                                sibling = sibling.PreviousSibling();
+                            }
+                        }
+                    }
+
+                    foreach (var bkm in bkmToremove)
+                        bkm.Remove();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
 
                 doc1.Save();
             }
+        }
+
+        private static void setBookmarksAfterCompare(WmlDocument document)
+        {
+            foreach (var fc in document.MainDocumentPart.Descendants(W.fldChar))
+            {
+                fc.SetAttributeValue(W.dirty, true);
+            }
+            document.Save();
+
+            //using (var doc1 = WordprocessingDocument.Open(document, true))
+            //{
+            //    foreach (var fc in doc1.MainDocumentPart.Document.Body.Descendants<FieldChar>())
+            //    {
+            //        fc.Dirty = true;
+            //    }
+            //}
+
+            //int count = 0;
+            //using (var doc1 = WordprocessingDocument.Open(path, true))
+            //{
+            //    foreach (BookmarkStart bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+            //    {
+            //        bkmStart.Id.Value = count.ToString();
+            //        count++;
+            //    }
+
+            //    count = 0;
+            //    foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+            //    {
+            //        bkmEnd.Id.Value = count.ToString();
+            //        count++;
+            //    }
+
+            //    doc1.Save();
+            //}
         }
 
         private static WmlDocument CompareInternal(
