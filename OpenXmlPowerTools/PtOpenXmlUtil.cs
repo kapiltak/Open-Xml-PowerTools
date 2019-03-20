@@ -29,21 +29,30 @@ namespace OpenXmlPowerTools
             XDocument partXDocument = part.Annotation<XDocument>();
             if (partXDocument != null) return partXDocument;
 
-            using (Stream partStream = part.GetStream())
+            try
             {
-                if (partStream.Length == 0)
+                using (Stream partStream = part.GetStream())
                 {
-                    partXDocument = new XDocument();
-                    partXDocument.Declaration = new XDeclaration("1.0", "UTF-8", "yes");
+                    if (partStream.Length == 0)
+                    {
+                        partXDocument = new XDocument();
+                        partXDocument.Declaration = new XDeclaration("1.0", "UTF-8", "yes");
+                    }
+                    else
+                    {
+                        using (XmlReader partXmlReader = XmlReader.Create(partStream))
+                            partXDocument = XDocument.Load(partXmlReader);
+                    }
                 }
-                else
-                {
-                    using (XmlReader partXmlReader = XmlReader.Create(partStream))
-                        partXDocument = XDocument.Load(partXmlReader);
-                }
+
+                part.AddAnnotation(partXDocument);
+            }
+            catch (Exception ex)
+            {
+                var message = ex.Message;
             }
 
-            part.AddAnnotation(partXDocument);
+
             return partXDocument;
         }
 

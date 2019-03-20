@@ -445,6 +445,23 @@ namespace OpenXmlPowerTools
                                 })
                             .ToList();
 
+                        if (contentAtomsBefore.Count() != contentAtomsAfter.Count())
+                        {
+                            comparisonUnitAtomList = contentAtomsBefore
+                                .Merge(contentAtomsAfter,
+                                    (before, after) => new ComparisonUnitAtom(
+                                        after.ContentElement,
+                                        after.AncestorElements,
+                                        after.Part,
+                                        settings)
+                                    {
+                                        CorrelationStatus = CorrelationStatus.Equal,
+                                        ContentElementBefore = before.ContentElement,
+                                        ComparisonUnitAtomBefore = before
+                                    })
+                                .ToList();
+                        }
+
                         return comparisonUnitAtomList;
                     }
 
@@ -492,6 +509,30 @@ namespace OpenXmlPowerTools
             }
 
             return listOfComparisonUnitAtoms;
+        }
+
+        static IEnumerable<T> Merge<T>(this IEnumerable<T> first,
+            IEnumerable<T> second, Func<T, T, T> operation)
+        {
+            using (var iter1 = first.GetEnumerator())
+            using (var iter2 = second.GetEnumerator())
+            {
+                while (iter1.MoveNext())
+                {
+                    if (iter2.MoveNext())
+                    {
+                        yield return operation(iter1.Current, iter2.Current);
+                    }
+                    else
+                    {
+                        yield return iter1.Current;
+                    }
+                }
+                while (iter2.MoveNext())
+                {
+                    yield return iter2.Current;
+                }
+            }
         }
 
         /// Here is the crux of the fix to the algorithm.  After assembling the entire list of ComparisonUnitAtoms, we do the following:

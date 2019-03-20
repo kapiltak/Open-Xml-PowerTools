@@ -72,7 +72,7 @@ namespace OpenXmlPowerTools
             if (acceptDocumentFirstChanges)
             {
                 var manualEdits = WmlComparer.Compare(docOriginal, docNegotiated, settings);
-                var manualRevisions = WmlComparer.GetRevisions(manualEdits, settings);
+                var manualRevisions = WmlComparer.GetRevisions(manualEdits, new WmlComparerSettings(){AuthorForRevisions = author + "_Utility"});
                 var manualRevisionRemovalList = new List<WmlComparer.WmlComparerRevision>();
                 var manualRevisionAdditionList = new List<WmlComparer.WmlComparerRevision>();
 
@@ -116,37 +116,46 @@ namespace OpenXmlPowerTools
             
             return result;
         }
+
+        //private static void setBookmarks(MemoryStream stream)
+        //{
+        //    using (var doc1 = WordprocessingDocument.Open(stream, true))
+        //    {
+
+        //    }
+        //}
+
         private static void setBookmarks(MemoryStream stream)
         {
             using (var doc1 = WordprocessingDocument.Open(stream, true))
             {
-                //foreach (var fc in doc1.MainDocumentPart.Document.Body.Descendants<FieldChar>())
-                //{
-                //    fc.Dirty = false;
-                //    if (fc.FieldCharType == "begin")
-                //    {
-                //        var run = fc.Parent;
-                //        while (true)
-                //        {
-                //            run = run.NextSibling();
-                //            if (run == null)
-                //                break;
+                foreach (var fc in doc1.MainDocumentPart.Document.Body.Descendants<FieldChar>())
+                {
+                    fc.Dirty = false;
+                    if (fc.FieldCharType == "begin")
+                    {
+                        var run = fc.Parent;
+                        while (true)
+                        {
+                            run = run.NextSibling();
+                            if (run == null)
+                                break;
 
-                //            foreach (var text in run.Descendants<Text>())
-                //            {
-                //                text.Text = "{Link}";
-                //            }
+                            foreach (var text in run.Descendants<Text>())
+                            {
+                                text.Text = "{Link}";
+                            }
 
-                //            if (run.Descendants<FieldChar>().Count() <= 0)
-                //                continue;
+                            if (run.Descendants<FieldChar>().Count() <= 0)
+                                continue;
 
-                //            var nextfc = run.Descendants<FieldChar>().First();
+                            var nextfc = run.Descendants<FieldChar>().First();
 
-                //            if (nextfc.FieldCharType == "end")
-                //                break;
-                //        }
-                //    }
-                //}
+                            if (nextfc.FieldCharType == "end")
+                                break;
+                        }
+                    }
+                }
 
                 //foreach (BookmarkStart bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
                 //{
@@ -170,50 +179,68 @@ namespace OpenXmlPowerTools
                 try
                 {
                     List<OpenXmlElement> bkmToremove = new List<OpenXmlElement>();
-                    foreach (var child in doc1.MainDocumentPart.Document.Body.ChildElements)
-                    {
-                        if (child.GetType() == typeof(BookmarkStart))
-                        {
-                            var sibling = child.NextSibling();
-                            while (sibling != null)
-                            {
-                                if (sibling.GetType() == typeof(Paragraph))
-                                {
-                                    var paraProps = sibling.Descendants<ParagraphProperties>().FirstOrDefault();
-                                    if (paraProps != null)
-                                    {
-                                        paraProps.InsertAfterSelf(child.CloneNode(true));
-                                        bkmToremove.Add(child);
-                                        break;
-                                    }
-                                }
+                    List<OpenXmlElement> bkmToAdd = new List<OpenXmlElement>();
+                    string id = "";
 
-                                sibling = sibling.NextSibling();
-                            }
-                        }
+                    foreach (var bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                    {
+                        id = bkmStart.Id.Value;
+                        var bkmEnd = doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>().Where(x => x.Id.Value == id)
+                            .FirstOrDefault();
+                        if(bkmEnd == null)
+                            bkmToremove.Add(bkmStart);
+                    }
+
+                    foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+                    {
+                        id = bkmEnd.Id.Value;
+                        var bkmStart = doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>()
+                            .Where(x => x.Id.Value == id).FirstOrDefault();
+                        if(bkmStart == null)
+                            bkmToremove.Add(bkmEnd);
                     }
 
                     foreach (var bkm in bkmToremove)
                         bkm.Remove();
 
                     bkmToremove = new List<OpenXmlElement>();
-                    string id = "";
-                    foreach (var bkm in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+
+                    foreach (var element in doc1.MainDocumentPart.Document.Body.Descendants<OpenXmlElement>())
                     {
-                        var found = false;
-                        id = bkm.Id.Value;
-                        foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+                        if (bkmToAdd.Count > 0 && element.GetType() == typeof(Paragraph))
                         {
-                            if (bkmEnd.Id.Value == id)
+                            var paraProps = element.Descendants<ParagraphProperties>().FirstOrDefault();
+                            if (paraProps != null)
                             {
-                                found = true;
+                                for (int i = bkmToAdd.Count - 1; i >= 0; i--)
+                                {
+                                    paraProps.InsertAfterSelf(bkmToAdd[i].CloneNode(true));
+                                }
+
+                                bkmToAdd = new List<OpenXmlElement>();
+                            }
+                        }
+
+                        if (element.GetType() != typeof(BookmarkStart))
+                            continue;
+
+                        var parent = element.Parent;
+                        var hasParentPara = false;
+                        while (parent.GetType() != typeof(Body))
+                        {
+                            if (parent.GetType() == typeof(Paragraph))
+                            {
+                                hasParentPara = true;
                                 break;
                             }
+
+                            parent = parent.Parent;
                         }
 
-                        if (!found)
+                        if (!hasParentPara)
                         {
-                            bkmToremove.Add(bkm);
+                            bkmToAdd.Add(element.CloneNode(true));
+                            bkmToremove.Add(element);
                         }
                     }
 
@@ -222,27 +249,60 @@ namespace OpenXmlPowerTools
 
 
                     bkmToremove = new List<OpenXmlElement>();
-                    foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.ChildElements)
+                    OpenXmlElement lastPara = null;
+                    foreach (var element in doc1.MainDocumentPart.Document.Body.Descendants<OpenXmlElement>())
                     {
-                        if (bkmEnd.GetType() == typeof(BookmarkEnd))
-                        {
-                            var sibling = bkmEnd.PreviousSibling();
-                            while (sibling != null)
-                            {
-                                if (sibling.GetType() == typeof(Paragraph))
-                                {
-                                    sibling.AppendChild(bkmEnd.CloneNode(true));
-                                    bkmToremove.Add(bkmEnd);
-                                    break;
-                                }
+                        if (element.GetType() == typeof(Paragraph))
+                            lastPara = element;
 
-                                sibling = sibling.PreviousSibling();
+                        if (element.GetType() == typeof(BookmarkEnd))
+                        {
+                            id = (element as BookmarkEnd).Id.Value;
+                            var bkmStart = doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>()
+                                .Where(x => x.Id.Value == id).FirstOrDefault();
+
+                            if (bkmStart != null) //&& element.Parent != bkmStart.Parent
+                            {
+                                var nextElement = bkmStart.NextSibling();
+                                while (nextElement != null)
+                                {
+                                    if (nextElement.GetType() != typeof(BookmarkStart))
+                                    {
+                                        nextElement.InsertBeforeSelf(element.CloneNode(true));
+                                        bkmToremove.Add(element);
+                                        break;
+                                    }
+
+                                    nextElement = nextElement.NextSibling();
+                                }
                             }
                         }
                     }
 
                     foreach (var bkm in bkmToremove)
                         bkm.Remove();
+
+
+                    foreach (DocumentFormat.OpenXml.Wordprocessing.Table tbl in doc1.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Table>())
+                    {
+                        var maxCellCount = 0;
+                        foreach (DocumentFormat.OpenXml.Wordprocessing.TableRow tr in tbl.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>())
+                        {
+                            if (maxCellCount < tr.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Count())
+                                maxCellCount = tr.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Count();
+                        }
+
+                        foreach (DocumentFormat.OpenXml.Wordprocessing.TableRow tr in tbl.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>())
+                        {
+                            if (maxCellCount == tr.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Count() &&
+                                tr.TableRowProperties.Descendants<GridAfter>().Any())
+                            {
+                                tr.TableRowProperties.Descendants<GridAfter>().FirstOrDefault().Remove();
+                                foreach (var gs in tr.Descendants<GridSpan>())
+                                    gs.Remove();
+                            }
+                        }
+                    }
                 }
                 catch (Exception e)
                 {
@@ -256,218 +316,306 @@ namespace OpenXmlPowerTools
 
         private static WmlDocument acceptManualEditsAfterTriangularCompare(WmlDocument result, List<WmlComparerRevision> manualRevisions, List<WmlComparerRevision> updateRevisions)
         {
-            WmlDocument returnDoc;
-            using (var ms = new MemoryStream())
+            WmlDocument returnDoc = result;
+
+            try
             {
-                ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
-                using (DocumentFormat.OpenXml.Packaging.WordprocessingDocument wdDoc = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(ms, true))
+                using (var ms = new MemoryStream())
                 {
-                    //// Handle the formatting changes.
-                    //List<ParagraphPropertiesChange> changes = wdDoc.MainDocumentPart.Document.Body.Descendants<ParagraphPropertiesChange>().ToList();
-
-                    //foreach (var change in changes)
-                    //{
-                    //    if (!manualRevisions.Any(x => x.Date == change.Date))
-                    //        continue;
-                    //    change.Remove();
-                    //}
-
-                    // Handle the deletions.
-                    var deletedItems = wdDoc.MainDocumentPart.Document.Body.Descendants<Deleted>().ToList();
-                    foreach (var deletion in deletedItems)
+                    ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
+                    using (DocumentFormat.OpenXml.Packaging.WordprocessingDocument wdDoc = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(ms, true))
                     {
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
+                        //// Handle the formatting changes.
+                        //List<ParagraphPropertiesChange> changes = wdDoc.MainDocumentPart.Document.Body.Descendants<ParagraphPropertiesChange>().ToList();
+
+                        //foreach (var change in changes)
+                        //{
+                        //    if (!manualRevisions.Any(x => x.Date == change.Date))
+                        //        continue;
+                        //    change.Remove();
+                        //}
+
+                        // Handle the deletions.
+                        var deletedItems = wdDoc.MainDocumentPart.Document.Body.Descendants<Deleted>().ToList();
+                        foreach (var deletion in deletedItems)
                         {
-                            deletion.Remove();
-                        }
-                    }
-
-                    var deletedRuns = wdDoc.MainDocumentPart.Document.Body.Descendants<DeletedRun>().ToList();
-                    foreach (var deletion in deletedRuns)
-                    {
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
-                        {
-                            foreach (var run in deletion.Elements<DocumentFormat.OpenXml.Wordprocessing.Run>())
-                            {
-                                var outerXML = run.OuterXml.Replace("w:delText", "w:t");
-                                outerXML = outerXML.Replace("w:delInstrText", "w:InstrText");
-                                DocumentFormat.OpenXml.Wordprocessing.Run newRun = new DocumentFormat.OpenXml.Wordprocessing.Run(outerXML);
-                                deletion.InsertBeforeSelf(newRun);
-                                //if (run == deletion.FirstChild)
-                                //{
-                                //    deletion.InsertAfterSelf(newRun);
-                                //}
-                                //else
-                                //{
-                                //    deletion.NextSibling().InsertAfterSelf(newRun);
-                                //}
-                            }
-
-                            //var parentPara = deletion.Parent;
-                            //var deleted = parentPara.Descendants<Deleted>().FirstOrDefault();
-                            //if (deleted != null)
-                            //    deleted.Remove();
-
-                            deletion.RemoveAttribute("rsidR",
-                                "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-                            deletion.RemoveAttribute("rsidRPr",
-                                "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-                            var parent1 = deletion.Parent;
-                            var xml1 = parent1.OuterXml;
-                            deletion.RemoveAllChildren();
-                            deletion.Remove();
-
-                            continue;
-                        }
-                    }
-
-                    var deletedMathControls = wdDoc.MainDocumentPart.Document.Body.Descendants<DeletedMathControl>().ToList();
-                    foreach (var deletion in deletedMathControls)
-                    {
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
-                        {
-                            foreach (var run in deletion.Elements<DocumentFormat.OpenXml.Wordprocessing.Run>())
-                            {
-                                DocumentFormat.OpenXml.Wordprocessing.Run newRun = new DocumentFormat.OpenXml.Wordprocessing.Run(run.OuterXml.Replace("w:delText", "w:t"));
-
-                                if (run == deletion.FirstChild)
-                                {
-                                    deletion.InsertAfterSelf(newRun);
-                                }
-                                else
-                                {
-                                    deletion.NextSibling().InsertAfterSelf(newRun);
-                                }
-                            }
-
-                            var parentPara = deletion.Parent;
-                            var deleted = parentPara.Descendants<Deleted>().FirstOrDefault();
-                            if (deleted != null)
-                                deleted.Remove();
-
-                            deletion.RemoveAttribute("rsidR",
-                                "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-                            deletion.RemoveAttribute("rsidRPr",
-                                "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-                            deletion.Remove();
-                            continue;
-                        }
-                    }
-
-                    //Insertions
-                    var insertedItems = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Inserted>().ToList();
-                    foreach (var insertion in insertedItems)
-                    {
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
-                        {
-                            var parentPara = insertion.Parent;
-                            insertion.Remove();
-                            if (parentPara.InnerText == string.Empty)
-                                parentPara.Remove();
-                        }
-                    }
-
-                    var insertedRuns = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.InsertedRun>().ToList();
-                    List<InsertedRun> combinedRuns = new List<InsertedRun>();
-                    List<WmlComparer.WmlComparerRevision> combinedRevisions = new List<WmlComparer.WmlComparerRevision>();
-                    foreach (var insertion in insertedRuns)
-                    {
-                        var tempInsertion = new InsertedRun(insertion.OuterXml);
-                        foreach (var child in tempInsertion.Descendants())
-                        {
-                            if (child.GetType() == typeof(FieldCode))
-                            {
-                                child.Remove();
-                            }
-                        }
-
-                        var textToCompare = tempInsertion.InnerText;
-
-                        if (updateRevisions.Any(x =>
-                            x.Text.Trim() == insertion.InnerText.Trim() &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
-                        {
-                            updateRevisions.Remove(updateRevisions.Where(x => x.Text.Trim() == insertion.InnerText.Trim() && x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted).First());
-                            continue;
-                        }
-
-                        //var parentPara = insertion.Parent;
-                        //insertion.Remove();
-                        //if (parentPara.InnerText == string.Empty)
-                        //    parentPara.Remove();
-
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == textToCompare.Trim() && x.Date == insertion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
-                        {
-                            combinedRuns = new List<InsertedRun>();
-                            combinedRevisions = new List<WmlComparer.WmlComparerRevision>();
-                            var parentPara = insertion.Parent;
-                            insertion.Remove();
-                            if (parentPara != null && parentPara.Parent != null && parentPara.InnerText == string.Empty)
-                                parentPara.Remove();
-
-                            //manualRevisions.Remove(manualRevisions.Where(x => x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
-                        }
-                        else if (manualRevisions.Any(x => x.Text.Trim().Contains(insertion.InnerText.Trim()) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
-                        {
-                            combinedRuns.Add(insertion);
-                            combinedRevisions.Add(manualRevisions.Where(x => x.Text.Trim().Contains(insertion.InnerText.Trim()) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
-                            var combinedText = "";
-                            foreach (DocumentFormat.OpenXml.Wordprocessing.InsertedRun combinedInsertion in combinedRuns)
-                            {
-                                combinedText += combinedInsertion.InnerText;
-                            }
-
                             if (manualRevisions.Any(x =>
-                                x.Text.Trim() == combinedText && x.Date == insertion.Date &&
+                                x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
+                            {
+                                deletion.Remove();
+                            }
+                        }
+
+                        var deletedRuns = wdDoc.MainDocumentPart.Document.Body.Descendants<DeletedRun>().ToList();
+                        foreach (var deletion in deletedRuns)
+                        {
+                            if (manualRevisions.Any(x =>
+                                x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
+                            {
+                                foreach (var run in deletion.Elements<DocumentFormat.OpenXml.Wordprocessing.Run>())
+                                {
+                                    var outerXML = run.OuterXml.Replace("w:delText", "w:t");
+                                    outerXML = outerXML.Replace("w:delInstrText", "w:InstrText");
+                                    DocumentFormat.OpenXml.Wordprocessing.Run newRun = new DocumentFormat.OpenXml.Wordprocessing.Run(outerXML);
+                                    deletion.InsertBeforeSelf(newRun);
+                                    //if (run == deletion.FirstChild)
+                                    //{
+                                    //    deletion.InsertAfterSelf(newRun);
+                                    //}
+                                    //else
+                                    //{
+                                    //    deletion.NextSibling().InsertAfterSelf(newRun);
+                                    //}
+                                }
+
+                                //var parentPara = deletion.Parent;
+                                //var deleted = parentPara.Descendants<Deleted>().FirstOrDefault();
+                                //if (deleted != null)
+                                //    deleted.Remove();
+
+                                deletion.RemoveAttribute("rsidR",
+                                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+                                deletion.RemoveAttribute("rsidRPr",
+                                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+                                var parent1 = deletion.Parent;
+                                var xml1 = parent1.OuterXml;
+                                deletion.RemoveAllChildren();
+                                deletion.Remove();
+
+                                continue;
+                            }
+                        }
+
+                        var deletedMathControls = wdDoc.MainDocumentPart.Document.Body.Descendants<DeletedMathControl>().ToList();
+                        foreach (var deletion in deletedMathControls)
+                        {
+                            if (manualRevisions.Any(x =>
+                                x.Text.Trim() == deletion.InnerText.Trim() && x.Date == deletion.Date &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
+                            {
+                                foreach (var run in deletion.Elements<DocumentFormat.OpenXml.Wordprocessing.Run>())
+                                {
+                                    DocumentFormat.OpenXml.Wordprocessing.Run newRun = new DocumentFormat.OpenXml.Wordprocessing.Run(run.OuterXml.Replace("w:delText", "w:t"));
+
+                                    if (run == deletion.FirstChild)
+                                    {
+                                        deletion.InsertAfterSelf(newRun);
+                                    }
+                                    else
+                                    {
+                                        deletion.NextSibling().InsertAfterSelf(newRun);
+                                    }
+                                }
+
+                                var parentPara = deletion.Parent;
+                                var deleted = parentPara.Descendants<Deleted>().FirstOrDefault();
+                                if (deleted != null)
+                                    deleted.Remove();
+
+                                deletion.RemoveAttribute("rsidR",
+                                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+                                deletion.RemoveAttribute("rsidRPr",
+                                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+                                deletion.Remove();
+                                continue;
+                            }
+                        }
+
+                        //Insertions
+                        var insertedItems = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Inserted>().ToList();
+                        foreach (var insertion in insertedItems)
+                        {
+                            if (manualRevisions.Any(x =>
+                                x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date &&
                                 x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
                             {
-                                foreach (DocumentFormat.OpenXml.Wordprocessing.InsertedRun combinedInsertion in combinedRuns)
-                                {
-                                    var parentPara = combinedInsertion.Parent;
-                                    combinedInsertion.Remove();
-                                    if (parentPara.InnerText == string.Empty)
-                                        parentPara.Remove();
-                                }
-
-                                //foreach (var rev in combinedRevisions)
-                                //    manualRevisions.Remove(rev);
-
-                                combinedRuns = new List<InsertedRun>();
+                                manualRevisions.Remove(manualRevisions.Where(x => x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
+                                var parentPara = insertion.Parent;
+                                insertion.Remove();
+                                if (parentPara.InnerText == string.Empty)
+                                    parentPara.Remove();
                             }
                         }
-                    }
 
-                    var insertedMathControls = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.InsertedMathControl>().ToList();
-                    foreach (var insertion in insertedMathControls)
-                    {
-                        if (manualRevisions.Any(x =>
-                            x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date &&
-                            x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                        var insertedRuns = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.InsertedRun>().ToList();
+                        List<InsertedRun> combinedRuns = new List<InsertedRun>();
+                        List<WmlComparer.WmlComparerRevision> combinedRevisions = new List<WmlComparer.WmlComparerRevision>();
+                        foreach (var insertion in insertedRuns)
                         {
-                            var parentPara = insertion.Parent;
-                            insertion.Remove();
-                            if (parentPara.InnerText == string.Empty)
-                                parentPara.Remove();
+                            var fcStarted = false;
+                            List<string> textToCompare = new List<string>();
+
+                            foreach (var child in insertion.Descendants())
+                            {
+                                if (child.GetType() == typeof(FieldCode))
+                                    continue;
+
+                                if (child.GetType() == typeof(FieldChar) &&
+                                    (child as FieldChar).FieldCharType == FieldCharValues.Begin)
+                                {
+                                    fcStarted = true;
+                                    continue;
+                                }
+
+                                if (child.GetType() == typeof(FieldChar) &&
+                                    (child as FieldChar).FieldCharType == FieldCharValues.End)
+                                {
+                                    fcStarted = false;
+                                    continue;
+                                }
+
+                                if (child.GetType() == typeof(Text) && fcStarted == false)
+                                {
+                                    textToCompare.Add(child.InnerText);
+                                }
+                            }
+
+                            if (updateRevisions.Any(x =>
+                                x.Text.Trim() == insertion.InnerText.Trim() &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted))
+                            {
+                                updateRevisions.Remove(updateRevisions.Where(x => x.Text.Trim() == insertion.InnerText.Trim() && x.RevisionType == WmlComparer.WmlComparerRevisionType.Inserted).First());
+                                continue;
+                            }
+
+                            //var parentPara = insertion.Parent;
+                            //insertion.Remove();
+                            //if (parentPara.InnerText == string.Empty)
+                            //    parentPara.Remove();
+
+                            if (manualRevisions.Any(x =>
+                                x.Text.Trim() == string.Join("", textToCompare) && x.Date == insertion.Date &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                            {
+                                combinedRuns = new List<InsertedRun>();
+                                combinedRevisions = new List<WmlComparer.WmlComparerRevision>();
+
+                                var parentPara = insertion.Parent;
+                                insertion.Remove();
+
+                                if (parentPara != null && parentPara.Parent != null && parentPara.InnerText == string.Empty)
+                                {
+                                    var parentCell = parentPara.Parent;
+                                    parentPara.Remove();
+
+                                    if (parentCell != null && parentCell.InnerText == string.Empty)
+                                    {
+                                        var parentRow = parentCell.Parent;
+                                        if (parentRow != null && parentRow.InnerText == string.Empty)
+                                            parentRow.Remove();
+                                    }
+                                }
+
+                                //manualRevisions.Remove(manualRevisions.Where(x => x.Text.Trim() == string.Join("", textToCompare) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
+                            }
+                            else if (manualRevisions.Any(x => x.Text.Trim().Contains(string.Join("", textToCompare)) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                            {
+                                combinedRuns.Add(insertion);
+                                combinedRevisions.Add(manualRevisions.Where(x => x.Text.Trim().Contains(string.Join("", textToCompare)) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
+                                var combinedText = "";
+                                foreach (DocumentFormat.OpenXml.Wordprocessing.InsertedRun combinedInsertion in combinedRuns)
+                                {
+                                    combinedText += combinedInsertion.InnerText;
+                                }
+
+                                if (manualRevisions.Any(x =>
+                                    x.Text.Trim() == combinedText && x.Date == insertion.Date &&
+                                    x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                                {
+                                    foreach (DocumentFormat.OpenXml.Wordprocessing.InsertedRun combinedInsertion in combinedRuns)
+                                    {
+                                        var parentPara = combinedInsertion.Parent;
+                                        combinedInsertion.Remove();
+                                        if (parentPara.InnerText == string.Empty)
+                                            parentPara.Remove();
+                                    }
+
+                                    //foreach (var rev in combinedRevisions)
+                                    //    manualRevisions.Remove(rev);
+
+                                    combinedRuns = new List<InsertedRun>();
+                                }
+
+                                //manualRevisions.Remove(manualRevisions.Where(x => x.Text.Trim().Contains(string.Join("", textToCompare)) && x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted).First());
+                            }
+                            else
+                            {
+                                foreach (WmlComparerRevision mr in manualRevisions.Where(x => x.Date == insertion.Date && x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                                {
+                                    var mrText = mr.Text;
+                                    var containsText = true;
+                                    foreach (var text in textToCompare)
+                                    {
+                                        if (mrText.Contains(text))
+                                        {
+                                            mrText = mrText.Remove(mrText.IndexOf(text), text.Length);
+                                        }
+                                        else
+                                        {
+                                            containsText = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (containsText)
+                                    {
+                                        var parentPara = insertion.Parent;
+                                        insertion.Remove();
+
+                                        if (parentPara != null && parentPara.Parent != null && parentPara.InnerText == string.Empty)
+                                        {
+                                            var parentCell = parentPara.Parent;
+                                            parentPara.Remove();
+
+                                            if (parentCell != null && parentCell.InnerText == string.Empty)
+                                            {
+                                                var parentRow = parentCell.Parent;
+                                                if (parentRow != null && parentRow.InnerText == string.Empty)
+                                                    parentRow.Remove();
+                                            }
+                                        }
+
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        var insertedMathControls = wdDoc.MainDocumentPart.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.InsertedMathControl>().ToList();
+                        foreach (var insertion in insertedMathControls)
+                        {
+                            if (manualRevisions.Any(x =>
+                                x.Text.Trim() == insertion.InnerText.Trim() && x.Date == insertion.Date &&
+                                x.RevisionType == WmlComparer.WmlComparerRevisionType.Deleted))
+                            {
+                                var parentPara = insertion.Parent;
+                                insertion.Remove();
+                                if (parentPara.InnerText == string.Empty)
+                                    parentPara.Remove();
+                            }
+                        }
+
+                        foreach (FieldChar fc in wdDoc.MainDocumentPart.Document.Body.Descendants<FieldChar>())
+                        {
+                            fc.Dirty = true;
+                        }
+
+                        foreach (var bkmStart in wdDoc.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                        {
+                            var bkmId = bkmStart.Id.Value;
+                            var bkmEnd = wdDoc.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>()
+                                .Where(x => x.Id.Value == bkmId).FirstOrDefault();
                         }
                     }
 
-                    foreach (FieldChar fc in wdDoc.MainDocumentPart.Document.Body.Descendants<FieldChar>())
-                    {
-                        fc.Dirty = true;
-                    }
+                    returnDoc = new WmlDocument("Dummy.docx", ms.ToArray());
                 }
-
-                returnDoc = new WmlDocument("Dummy.docx", ms.ToArray());
+            }
+            catch (Exception ex)
+            {
+                var msg = ex.Message;
             }
 
             return returnDoc;
@@ -493,6 +641,9 @@ namespace OpenXmlPowerTools
 
             SaveDocumentIfDesired(source1, "Source1-Step1-PreProcess.docx", settings);
             SaveDocumentIfDesired(source2, "Source2-Step1-PreProcess.docx", settings);
+
+            //source1 = RemoveBookmarks(source1);
+            //source2 = RemoveBookmarks(source2);
 
             // at this point, both source1 and source2 have unid on every element.  These are the values that will
             // enable reassembly of the XML tree.  But we need other values.
@@ -589,6 +740,61 @@ namespace OpenXmlPowerTools
             }
         }
 
+        private static List<BkmInfo> bkmInfos = new List<BkmInfo>();
+        private static WmlDocument RemoveBookmarks(WmlDocument document)
+        {
+            using (var ms = new MemoryStream())
+            {
+                ms.Write(document.DocumentByteArray,0,document.DocumentByteArray.Length);
+                using (DocumentFormat.OpenXml.Packaging.WordprocessingDocument doc1 =
+                    DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(ms, true))
+                {
+                    List<OpenXmlElement> bkmToremove = new List<OpenXmlElement>();
+                    string id = "";
+
+                    foreach (var bkmStart in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                    {
+                        id = bkmStart.Id.Value;
+                        var bkmEnd = doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>().Where(x => x.Id.Value == id)
+                            .FirstOrDefault();
+                        if (bkmEnd == null)
+                            bkmToremove.Add(bkmStart);
+                    }
+
+                    foreach (var bkmEnd in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkEnd>())
+                    {
+                        id = bkmEnd.Id.Value;
+                        var bkmStart = doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>()
+                            .Where(x => x.Id.Value == id).FirstOrDefault();
+                        if (bkmStart == null)
+                            bkmToremove.Add(bkmEnd);
+                    }
+
+                    foreach (var bkm in bkmToremove)
+                        bkm.Remove();
+
+                    foreach (var bkm in doc1.MainDocumentPart.Document.Body.Descendants<BookmarkStart>())
+                    {
+                        var nextSibling = bkm.NextSibling();
+                        while (nextSibling != null)
+                        {
+                            if (nextSibling.GetType() != typeof(BookmarkStart) && nextSibling.GetType() != typeof(BookmarkEnd))
+                            {
+                                BkmInfo info = new BkmInfo();
+                                info.elementXML = bkm.OuterXml;
+                                info.UnidofNextElement = nextSibling.GetAttribute("Unid", "pt14").Value;
+                                bkmInfos.Add(info);
+                                break;
+                            }
+                        }
+                    }
+
+                    var bkmRemovedDocument = new WmlDocument("bkmRemoved.docx", ms.ToArray());
+                    return bkmRemovedDocument;
+                }
+            }
+        }
+
         private static void SaveDocumentIfDesired(WmlDocument source, string name, WmlComparerSettings settings)
         {
             if (SaveIntermediateFilesForDebugging && settings.DebugTempFileDi != null)
@@ -652,5 +858,11 @@ namespace OpenXmlPowerTools
 
             return node;
         }
+    }
+
+    public class BkmInfo
+    {
+        public string elementXML;
+        public string UnidofNextElement;
     }
 }

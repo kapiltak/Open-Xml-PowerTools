@@ -12,6 +12,7 @@ namespace OpenXmlPowerTools
         {
             public WmlComparerRevisionType RevisionType;
             public string Text;
+            public string TextWithoutReferences;
             public string Author;
             public string Date;
             public XElement ContentXElement;
