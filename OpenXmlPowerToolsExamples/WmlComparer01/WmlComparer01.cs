@@ -17,15 +17,15 @@ namespace OpenXmlPowerTools
         static void Main(string[] args)
         {
             MemoryStream msOriginal = new MemoryStream();
-            string doc1 = @"C:\Users\KapilTak\Downloads\Compare\First run from drafter.docx";
-            string doc2 = @"C:\Users\KapilTak\Downloads\Compare\Manual edits.docx";
-            string doc3 = @"C:\Users\KapilTak\Downloads\Compare\Second run from drafter.docx";
+            string doc1 = @"C:\Users\KapilTak\Downloads\Compare\First run.docx";
+            string doc2 = @"C:\Users\KapilTak\Downloads\Compare\Negotiated.docx";
+            string doc3 = @"C:\Users\KapilTak\Downloads\Compare\Second run.docx";
             string docResult = @"C:\Users\KapilTak\Downloads\Compare\result.docx";
 
-            doc1 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (first).docx";
-            doc2 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (negotiated).docx";
-            doc3 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (rerun).docx";
-            docResult = @"C:\Users\KapilTak\Downloads\Compare\result.docx";
+            //doc1 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (first).docx";
+            //doc2 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (negotiated).docx";
+            //doc3 = @"C:\Users\KapilTak\Downloads\Compare\Share Purchase Agreement (rerun).docx";
+            //docResult = @"C:\Users\KapilTak\Downloads\Compare\result.docx";
 
             using (FileStream fs = File.OpenRead(doc1))
                 fs.CopyTo(msOriginal);
