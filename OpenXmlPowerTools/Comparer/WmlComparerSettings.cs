@@ -12,7 +12,7 @@ namespace OpenXmlPowerTools
         public char[] WordSeparators;
         public string AuthorForRevisions = "Open-Xml-PowerTools";
         public string DateTimeForRevisions = DateTime.Now.ToString("o");
-        public double DetailThreshold = 0.15;
+        public double DetailThreshold = 0.000000000000001;
         public bool CaseInsensitive = false;
         public CultureInfo CultureInfo = null;
         public Action<string> LogCallback = null;
